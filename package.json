@@ -1,0 +1,48 @@
+{
+  "name": "@goodapp/backup",
+  "version": "0.1.0",
+  "private": false,
+  "license": "MIT",
+  "description": "Nightly Postgres backup to an S3-compatible bucket (Cloudflare R2), with a grandfather-father-son retention policy — shared across GoodApp products.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/matthiasvienne-boop/goodapp-backup.git"
+  },
+  "homepage": "https://github.com/matthiasvienne-boop/goodapp-backup#readme",
+  "bugs": {
+    "url": "https://github.com/matthiasvienne-boop/goodapp-backup/issues"
+  },
+  "type": "commonjs",
+  "exports": {
+    "./server": {
+      "types": "./dist/cjs/server/index.d.ts",
+      "require": "./dist/cjs/server/index.js",
+      "import": "./dist/esm/server/index.js"
+    }
+  },
+  "typesVersions": {
+    "*": {
+      "server": [
+        "dist/cjs/server/index.d.ts"
+      ]
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "npm run build:cjs && npm run build:esm && npm run build:pkgs",
+    "build:cjs": "tsc -p tsconfig.cjs.json",
+    "build:esm": "tsc -p tsconfig.esm.json",
+    "build:pkgs": "node scripts/write-dist-package-json.js",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1127.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.12.7",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.9"
+  }
+}
