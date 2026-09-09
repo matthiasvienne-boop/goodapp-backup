@@ -35,6 +35,7 @@ import os from "node:os";
 import path from "node:path";
 import { S3Client, PutObjectCommand, ListObjectsV2Command, DeleteObjectCommand, } from "@aws-sdk/client-s3";
 import { daysToRetain } from "./retention.js";
+import { gemaskeerdeFout, maskeer } from "./redact.js";
 const execFileAsync = promisify(execFile);
 function normalizedPrefix(prefix) {
     if (!prefix.endsWith("/"))
@@ -55,15 +56,27 @@ async function dump(databaseUrl, filePath, log) {
     // --no-owner/--no-privileges: a dump restored into a different account
     // must not stumble over roles that don't exist there — exactly the
     // scenario a backup exists to cover.
-    const { stderr } = await execFileAsync("pg_dump", [
-        databaseUrl,
-        "--no-owner",
-        "--no-privileges",
-        "--format=plain",
-        `--file=${filePath}`,
-    ]);
-    if (stderr)
-        log(`[backup] pg_dump stderr (may just be normal progress output): ${stderr.trim()}`);
+    //
+    // The connection string is argv[1], and that is the whole reason for the
+    // masking below (TEN-86): when pg_dump exits non-zero, Node puts the entire
+    // command line into the error it throws, password included. Nothing that
+    // leaves this function may carry it.
+    let stderr;
+    try {
+        ({ stderr } = await execFileAsync("pg_dump", [
+            databaseUrl,
+            "--no-owner",
+            "--no-privileges",
+            "--format=plain",
+            `--file=${filePath}`,
+        ]));
+    }
+    catch (fout) {
+        throw gemaskeerdeFout(fout, databaseUrl);
+    }
+    if (stderr) {
+        log(`[backup] pg_dump stderr (may just be normal progress output): ${maskeer(stderr.trim(), databaseUrl)}`);
+    }
 }
 async function gzipFile(source, destination) {
     await pipeline(createReadStream(source), createGzip(), createWriteStream(destination));

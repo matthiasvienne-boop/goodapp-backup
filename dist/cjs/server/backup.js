@@ -41,6 +41,7 @@ const node_os_1 = __importDefault(require("node:os"));
 const node_path_1 = __importDefault(require("node:path"));
 const client_s3_1 = require("@aws-sdk/client-s3");
 const retention_js_1 = require("./retention.js");
+const redact_js_1 = require("./redact.js");
 const execFileAsync = (0, node_util_1.promisify)(node_child_process_1.execFile);
 function normalizedPrefix(prefix) {
     if (!prefix.endsWith("/"))
@@ -61,15 +62,27 @@ async function dump(databaseUrl, filePath, log) {
     // --no-owner/--no-privileges: a dump restored into a different account
     // must not stumble over roles that don't exist there — exactly the
     // scenario a backup exists to cover.
-    const { stderr } = await execFileAsync("pg_dump", [
-        databaseUrl,
-        "--no-owner",
-        "--no-privileges",
-        "--format=plain",
-        `--file=${filePath}`,
-    ]);
-    if (stderr)
-        log(`[backup] pg_dump stderr (may just be normal progress output): ${stderr.trim()}`);
+    //
+    // The connection string is argv[1], and that is the whole reason for the
+    // masking below (TEN-86): when pg_dump exits non-zero, Node puts the entire
+    // command line into the error it throws, password included. Nothing that
+    // leaves this function may carry it.
+    let stderr;
+    try {
+        ({ stderr } = await execFileAsync("pg_dump", [
+            databaseUrl,
+            "--no-owner",
+            "--no-privileges",
+            "--format=plain",
+            `--file=${filePath}`,
+        ]));
+    }
+    catch (fout) {
+        throw (0, redact_js_1.gemaskeerdeFout)(fout, databaseUrl);
+    }
+    if (stderr) {
+        log(`[backup] pg_dump stderr (may just be normal progress output): ${(0, redact_js_1.maskeer)(stderr.trim(), databaseUrl)}`);
+    }
 }
 async function gzipFile(source, destination) {
     await (0, promises_1.pipeline)((0, node_fs_1.createReadStream)(source), (0, node_zlib_1.createGzip)(), (0, node_fs_1.createWriteStream)(destination));
