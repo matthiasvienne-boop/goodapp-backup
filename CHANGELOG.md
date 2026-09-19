@@ -2,7 +2,7 @@
 
 All notable changes to this package are documented here, per [PACKAGE-STANDARD.md](https://github.com/matthiasvienne-boop/GoodApp-OS/blob/main/docs/PACKAGE-STANDARD.md) Chapter 9.
 
-## Unreleased
+## 0.2.0 — 2026-09-19
 
 ### Fixed
 

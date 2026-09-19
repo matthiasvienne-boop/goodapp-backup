@@ -1,6 +1,6 @@
 {
   "name": "@goodapp/backup",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": false,
   "license": "MIT",
   "description": "Nightly Postgres backup to an S3-compatible bucket (Cloudflare R2), with a grandfather-father-son retention policy — shared across GoodApp products.",
