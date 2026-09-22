@@ -2,6 +2,27 @@
 
 All notable changes to this package are documented here, per [PACKAGE-STANDARD.md](https://github.com/matthiasvienne-boop/GoodApp-OS/blob/main/docs/PACKAGE-STANDARD.md) Chapter 9.
 
+## 0.3.0 — 2026-09-22
+
+### Added
+
+- `runDatabaseBackup` now validates a dump before compressing and uploading it
+  (PLAT-164, raised via BEL-567). `pg_dump --format=plain` closes a complete
+  dump with a fixed trailer line; a truncated dump — a crashed connection, a
+  full disk, anything that stops the process mid-write — compresses and
+  uploads exactly as cleanly as a complete one, and the retention policy then
+  prunes the last good backup to make room for one that restores nothing. A
+  dump that is empty or missing its trailer line now throws before gzip/upload
+  — nothing is uploaded, nothing is pruned, the previous backup stays in
+  place.
+- `assertDumpIsComplete(filePath)`, exported standalone so a consumer with a
+  different dump format (e.g. a custom-format dump, which doesn't share this
+  trailer) can validate the same way, or so this exact check can be unit
+  tested independently of `pg_dump`.
+- Ported from Newbuild's own `controleerDump()` — the same check, generalized
+  so every consumer of `runDatabaseBackup()` gets it, not just the product
+  that wrote it first.
+
 ## 0.2.0 — 2026-09-19
 
 ### Fixed
