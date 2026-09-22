@@ -2,7 +2,7 @@
 
 A nightly Postgres backup to an S3-compatible bucket (Cloudflare R2 in practice, but nothing here is R2-specific), with a grandfather-father-son retention policy — shared across GoodApp products. Extracted from Newbuild's already-working implementation (PLAT-102); generalized only where a second consumer genuinely needed a different value plugged in. See [GoodApp OS's PACKAGE-STANDARD.md](https://github.com/matthiasvienne-boop/GoodApp-OS/blob/main/docs/PACKAGE-STANDARD.md) for the full standard this package follows.
 
-**Status: Draft.** Built and locally validated (Chapter 8 of the standard) — not yet consumed by any product in production.
+**Status: Live.** Consumed in production by BeleggersApp and Brickstory (Brickstory keeps its own dump-completeness validation for its custom-format dump — see `assertDumpIsComplete`'s note above for why plain-format's trailer check doesn't apply there). Newbuild runs its own extracted-from implementation directly rather than this package.
 
 ## What's in it
 
@@ -28,7 +28,9 @@ const result = await runDatabaseBackup({
 console.log(result.key, result.sizeBytes, result.deletedKeys);
 ```
 
-`runDatabaseBackup` runs `pg_dump`, gzips the output, uploads it as `<prefix><YYYY-MM-DD>-<HHmm>.sql.gz`, then deletes whichever of this consumer's own backups (matched by the same prefix) fall outside the retention policy — only after the upload succeeds, never before.
+`runDatabaseBackup` runs `pg_dump`, validates the dump is complete, gzips the output, uploads it as `<prefix><YYYY-MM-DD>-<HHmm>.sql.gz`, then deletes whichever of this consumer's own backups (matched by the same prefix) fall outside the retention policy — only after the upload succeeds, never before.
+
+An empty or truncated dump (a crashed connection, a full disk — anything that stops `pg_dump` before it finishes writing) throws before compression or upload: nothing is uploaded, nothing is pruned, and the previous backup stays in place (PLAT-164). `assertDumpIsComplete(filePath)` is the check itself, exported standalone for a consumer with a different dump format (e.g. custom-format, which doesn't share `--format=plain`'s trailer line) to reuse or test against.
 
 `daysToRetain(now, policy?)` is exported on its own because it's pure, deterministic logic worth testing independently of any I/O: given "now" and an optional policy, it returns the set of calendar days (`"YYYY-MM-DD"`, UTC) a backup taken on that day is allowed to survive on.
 

@@ -3,6 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.assertDumpIsComplete = assertDumpIsComplete;
 exports.runDatabaseBackup = runDatabaseBackup;
 /**
  * Nightly Postgres backup to an S3-compatible bucket (Cloudflare R2 in
@@ -84,6 +85,46 @@ async function dump(databaseUrl, filePath, log) {
         log(`[backup] pg_dump stderr (may just be normal progress output): ${(0, redact_js_1.maskeer)(stderr.trim(), databaseUrl)}`);
     }
 }
+/**
+ * `pg_dump --format=plain` closes a complete dump with a fixed trailer line.
+ * Its absence means the file is truncated — a crashed connection, a disk that
+ * filled up mid-dump, anything that stops the process before it finishes
+ * writing but after it created the file. gzip and upload never see the
+ * difference: a truncated dump compresses and uploads exactly as cleanly as a
+ * complete one, and the retention policy then prunes the last good backup to
+ * make room for a new one that restores nothing (PLAT-164, raised via
+ * BEL-567).
+ *
+ * Ported from Newbuild's own `controleerDump()` (apps/api/src/scripts/
+ * backup-database.ts) — the same check, generalized so every consumer of
+ * `runDatabaseBackup()` gets it, not just the one product that wrote it
+ * first.
+ *
+ * Only the tail is read: the trailer line is always the last thing pg_dump
+ * writes, and a dump can be large enough that reading the whole file just to
+ * check its last line would be wasteful.
+ */
+const DUMP_TRAILER = "PostgreSQL database dump complete";
+const TAIL_BYTES_TO_CHECK = 4096;
+function assertDumpIsComplete(filePath) {
+    const sizeBytes = (0, node_fs_1.statSync)(filePath).size;
+    if (sizeBytes === 0) {
+        throw new Error("[backup] pg_dump produced an empty file — nothing uploaded, nothing pruned.");
+    }
+    const tailLength = Math.min(sizeBytes, TAIL_BYTES_TO_CHECK);
+    const buffer = Buffer.alloc(tailLength);
+    const fd = (0, node_fs_1.openSync)(filePath, "r");
+    try {
+        (0, node_fs_1.readSync)(fd, buffer, 0, tailLength, sizeBytes - tailLength);
+    }
+    finally {
+        (0, node_fs_1.closeSync)(fd);
+    }
+    if (!buffer.toString("utf8").includes(DUMP_TRAILER)) {
+        throw new Error(`[backup] the dump is missing its trailer line and is therefore incomplete (${sizeBytes} bytes). ` +
+            "Nothing uploaded, nothing pruned — the previous backup stays in place.");
+    }
+}
 async function gzipFile(source, destination) {
     await (0, promises_1.pipeline)((0, node_fs_1.createReadStream)(source), (0, node_zlib_1.createGzip)(), (0, node_fs_1.createWriteStream)(destination));
     (0, node_fs_1.unlinkSync)(source);
@@ -123,6 +164,7 @@ async function runDatabaseBackup(options) {
     const gzipPath = `${rawPath}.gz`;
     log("[backup] starting pg_dump...");
     await dump(options.databaseUrl, rawPath, log);
+    assertDumpIsComplete(rawPath);
     log("[backup] compressing...");
     await gzipFile(rawPath, gzipPath);
     const sizeBytes = (0, node_fs_1.statSync)(gzipPath).size;

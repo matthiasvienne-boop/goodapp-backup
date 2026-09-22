@@ -26,4 +26,5 @@ export interface BackupResult {
     sizeBytes: number;
     deletedKeys: string[];
 }
+export declare function assertDumpIsComplete(filePath: string): void;
 export declare function runDatabaseBackup(options: BackupOptions): Promise<BackupResult>;
